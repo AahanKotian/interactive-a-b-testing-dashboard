@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A/B Testing Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg2: #f5f5f3; --bg3: #eeede8;
+    --text: #1a1a18; --text2: #6b6b66; --text3: #9c9c96;
+    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+    --radius: 8px; --radius-lg: 12px;
+    --blue: #185FA5; --blue-light: #E6F1FB;
+    --green: #1D9E75; --green-light: #EAF3DE; --green-dark: #3B6D11;
+    --red: #E24B4A; --red-light: #FCEBEB; --red-dark: #A32D2D;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1c; --bg2: #2a2a27; --bg3: #323230;
+      --text: #f0efea; --text2: #a0a09a; --text3: #6b6b66;
+      --border: rgba(255,255,255,0.12); --border2: rgba(255,255,255,0.22);
+      --blue-light: #042C53; --green-light: #173404; --green-dark: #9FE1CB;
+      --red-light: #501313; --red-dark: #F7C1C1;
+    }
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg3); color: var(--text); font-size: 15px; line-height: 1.6; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+  .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 1.25rem; }
+  .header-title { font-size: 20px; font-weight: 500; }
+  .header-sub { font-size: 13px; color: var(--text2); margin-top: 2px; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+  .filter-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .filter-row label { font-size: 13px; color: var(--text2); }
+  select, input[type=file] { font-size: 13px; padding: 6px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); cursor: pointer; }
+  select:focus { outline: none; border-color: var(--blue); }
+  button { font-size: 13px; padding: 7px 16px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: transparent; color: var(--text); cursor: pointer; transition: background .15s; }
+  button:hover { background: var(--bg2); }
+  button.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  button.primary:hover { background: #0C447C; }
+  .upload-label { font-size: 13px; padding: 7px 14px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; background: var(--bg); color: var(--text); transition: background .15s; }
+  .upload-label:hover { background: var(--bg2); }
+  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 700px) { .grid4 { grid-template-columns: 1fr 1fr; } .grid2 { grid-template-columns: 1fr; } }
+  .metric { background: var(--bg2); border-radius: var(--radius); padding: .875rem 1rem; }
+  .metric-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+  .metric-value { font-size: 22px; font-weight: 500; }
+  .metric-delta { font-size: 12px; margin-top: 2px; }
+  .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; }
+  .section-title { font-size: 12px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; }
+  .sig-box { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: .875rem 1rem; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .sig-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+  .sig-stat label { font-size: 12px; color: var(--text2); display: block; }
+  .sig-stat span { font-size: 14px; font-weight: 500; }
+  .badge { display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: var(--radius); font-weight: 500; }
+  .badge-success { background: var(--green-light); color: var(--green-dark); }
+  .badge-fail { background: var(--red-light); color: var(--red-dark); }
+  .up { color: var(--green); } .down { color: var(--red); }
+  table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  td, th { padding: 7px 10px; text-align: left; border-bottom: 0.5px solid var(--border); }
+  th { color: var(--text2); font-weight: 500; font-size: 12px; }
+  .legend { display: flex; gap: 16px; margin-bottom: 10px; font-size: 12px; color: var(--text2); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: middle; }
+  .chart-wrap { position: relative; height: 200px; }
+  .csv-hint { font-size: 12px; color: var(--text3); margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div>
+      <div class="header-title">A/B test dashboard</div>
+      <div class="header-sub">Checkout flow experiment &mdash; <span id="date-range">Jan 1 – Mar 31, 2024</span></div>
+    </div>
+    <div class="header-actions">
+      <label class="upload-label" for="csv-upload">Upload CSV</label>
+      <input type="file" id="csv-upload" accept=".csv" style="display:none">
+      <button class="primary" id="run-btn">Run A/B test</button>
+    </div>
+  </div>
+
+  <p class="csv-hint" style="margin-bottom:10px">CSV format: <code>variant, device, country, converted (0/1), revenue, date (YYYY-MM-DD)</code> &mdash; or use built-in sample data.</p>
+
+  <div class="filter-row">
+    <label>Device</label>
+    <select id="filter-device">
+      <option value="all">All devices</option>
+      <option value="mobile">Mobile</option>
+      <option value="desktop">Desktop</option>
+      <option value="tablet">Tablet</option>
+    </select>
+    <label>Country</label>
+    <select id="filter-country">
+      <option value="all">All countries</option>
+      <option value="US">United States</option>
+      <option value="GB">United Kingdom</option>
+      <option value="CA">Canada</option>
+      <option value="AU">Australia</option>
+    </select>
+    <label>Variant</label>
+    <select id="filter-variant">
+      <option value="both">Both groups</option>
+      <option value="control">Control only</option>
+      <option value="variant">Variant only</option>
+    </select>
+  </div>
+
+  <div class="grid4" id="metric-cards"></div>
+
+  <div class="sig-box">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:13px;color:var(--text2)">Significance:</span>
+      <span id="sig-label" class="badge">—</span>
+    </div>
+    <div class="sig-stats">
+      <div class="sig-stat"><label>p-value</label><span id="pval">—</span></div>
+      <div class="sig-stat"><label>95% CI</label><span id="ci">—</span></div>
+      <div class="sig-stat"><label>Lift</label><span id="lift" class="up">—</span></div>
+      <div class="sig-stat"><label>Est. power</label><span id="power">—</span></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="section-title">Conversion rate by day</div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#378ADD"></span>Control</span>
+        <span><span class="legend-dot" style="background:#1D9E75"></span>Variant</span>
+      </div>
+      <div class="chart-wrap"><canvas id="line-chart" role="img" aria-label="Daily conversion rates for control vs variant"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Sessions &amp; conversions by group</div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#378ADD"></span>Control</span>
+        <span><span class="legend-dot" style="background:#1D9E75"></span>Variant</span>
+      </div>
+      <div class="chart-wrap"><canvas id="bar-chart" role="img" aria-label="Sessions and conversions bar chart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="section-title">Revenue distribution (converted users)</div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#378ADD"></span>Control</span>
+        <span><span class="legend-dot" style="background:#1D9E75"></span>Variant</span>
+      </div>
+      <div class="chart-wrap"><canvas id="box-chart" role="img" aria-label="Revenue distribution statistics for A and B groups"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Segment breakdown by device</div>
+      <table id="segment-table">
+        <thead><tr><th>Device</th><th>Control CVR</th><th>Variant CVR</th><th>Lift</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Sample data generator ──────────────────────────────────────
+const SAMPLE_DATA = (() => {
+  const rows = [];
+  const devices = ['mobile','desktop','tablet'];
+  const countries = ['US','GB','CA','AU'];
+  const devWeights = [0.55, 0.35, 0.10];
+  const countryWeights = [0.60, 0.18, 0.14, 0.08];
+  function pick(arr, weights) {
+    let r = Math.random(), cum = 0;
+    for (let i = 0; i < arr.length; i++) { cum += weights[i]; if (r < cum) return arr[i]; }
+    return arr[arr.length - 1];
+  }
+  function rnd(min, max) { return min + Math.random() * (max - min); }
+  const start = new Date('2024-01-01');
+  for (let i = 0; i < 2000; i++) {
+    const variant = Math.random() < 0.5 ? 'control' : 'variant';
+    const device = pick(devices, devWeights);
+    const country = pick(countries, countryWeights);
+    const baseConv = variant === 'control' ? 0.032 : 0.041;
+    const devMod = device === 'desktop' ? 1.2 : device === 'mobile' ? 0.85 : 1.0;
+    const converted = Math.random() < (baseConv * devMod) ? 1 : 0;
+    const revenue = converted ? (rnd(20, 200) + (variant === 'variant' ? rnd(0, 30) : 0)) : 0;
+    const dayOffset = Math.floor(rnd(0, 90));
+    const date = new Date(start); date.setDate(date.getDate() + dayOffset);
+    rows.push({ variant, device, country, converted, revenue, date: date.toISOString().slice(0, 10) });
+  }
+  return rows;
+})();
+
+let DATA = SAMPLE_DATA.slice();
+let lineChart, barChart, boxChart;
+
+// ── Filters ────────────────────────────────────────────────────
+function filterData() {
+  const dv = document.getElementById('filter-device').value;
+  const cn = document.getElementById('filter-country').value;
+  const vr = document.getElementById('filter-variant').value;
+  return DATA.filter(r => {
+    if (dv !== 'all' && r.device !== dv) return false;
+    if (cn !== 'all' && r.country !== cn) return false;
+    if (vr === 'control' && r.variant !== 'control') return false;
+    if (vr === 'variant' && r.variant !== 'variant') return false;
+    return true;
+  });
+}
+
+// ── Welch's t-test ─────────────────────────────────────────────
+function tTest(a, b) {
+  const nA = a.length, nB = b.length;
+  if (nA < 2 || nB < 2) return null;
+  const mA = a.reduce((s, v) => s + v, 0) / nA;
+  const mB = b.reduce((s, v) => s + v, 0) / nB;
+  const vA = a.reduce((s, v) => s + (v - mA) ** 2, 0) / (nA - 1);
+  const vB = b.reduce((s, v) => s + (v - mB) ** 2, 0) / (nB - 1);
+  const se = Math.sqrt(vA / nA + vB / nB);
+  if (se === 0) return null;
+  const t = (mB - mA) / se;
+  const df = ((vA / nA + vB / nB) ** 2) / ((vA / nA) ** 2 / (nA - 1) + (vB / nB) ** 2 / (nB - 1));
+  // Approximate p-value using regularized incomplete beta
+  function pFromT(t, df) {
+    const x = df / (df + t * t);
+    const steps = 1000;
+    let ib = 0;
+    for (let i = 0; i < steps; i++) {
+      const xi = x * i / steps;
+      ib += Math.pow(xi, 0.5 - 1) * Math.pow(1 - xi, 0.5 - 1);
+    }
+    ib *= x / steps;
+    return Math.min(1, Math.max(0, ib));
+  }
+  const p = pFromT(Math.abs(t), Math.round(df));
+  return { mA, mB, t, p, se, ciLow: (mB - mA) - 1.96 * se, ciHigh: (mB - mA) + 1.96 * se, nA, nB };
+}
+
+// ── Metric cards ───────────────────────────────────────────────
+function updateMetricCards(filtered) {
+  const ctrl = filtered.filter(r => r.variant === 'control');
+  const vari = filtered.filter(r => r.variant === 'variant');
+  const cvrA = ctrl.length ? ctrl.filter(r => r.converted).length / ctrl.length : 0;
+  const cvrB = vari.length ? vari.filter(r => r.converted).length / vari.length : 0;
+  const revA = ctrl.filter(r => r.converted).reduce((s, r) => s + r.revenue, 0);
+  const revB = vari.filter(r => r.converted).reduce((s, r) => s + r.revenue, 0);
+  const liftPct = cvrA > 0 ? ((cvrB - cvrA) / cvrA * 100) : 0;
+  const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  const cards = [
+    { label: 'Control CVR', value: (cvrA * 100).toFixed(2) + '%', delta: '' },
+    { label: 'Variant CVR', value: (cvrB * 100).toFixed(2) + '%', delta: (liftPct > 0 ? '↑ +' : '↓ ') + liftPct.toFixed(1) + '% lift', cls: liftPct > 0 ? 'up' : 'down' },
+    { label: 'Total sessions', value: filtered.length.toLocaleString(), delta: ctrl.length + ' ctrl / ' + vari.length + ' var' },
+    { label: 'Variant revenue', value: '$' + fmt(revB), delta: 'vs $' + fmt(revA) + ' ctrl' }
+  ];
+  document.getElementById('metric-cards').innerHTML = cards.map(c =>
+    `<div class="metric"><div class="metric-label">${c.label}</div><div class="metric-value">${c.value}</div>${c.delta ? `<div class="metric-delta ${c.cls || ''}">${c.delta}</div>` : ''}</div>`
+  ).join('');
+}
+
+// ── Significance ───────────────────────────────────────────────
+function updateSignificance(filtered) {
+  const ctrl = filtered.filter(r => r.variant === 'control').map(r => r.converted);
+  const vari = filtered.filter(r => r.variant === 'variant').map(r => r.converted);
+  const res = tTest(ctrl, vari);
+  if (!res) return;
+  const sig = res.p < 0.05;
+  const sigEl = document.getElementById('sig-label');
+  sigEl.textContent = sig ? 'Significant (p < 0.05)' : 'Not significant';
+  sigEl.className = 'badge ' + (sig ? 'badge-success' : 'badge-fail');
+  document.getElementById('pval').textContent = res.p.toFixed(4);
+  document.getElementById('ci').textContent = '[' + (res.ciLow * 100).toFixed(2) + '%, ' + (res.ciHigh * 100).toFixed(2) + '%]';
+  const liftPct = res.mA > 0 ? ((res.mB - res.mA) / res.mA * 100) : 0;
+  const liftEl = document.getElementById('lift');
+  liftEl.textContent = (liftPct > 0 ? '+' : '') + liftPct.toFixed(2) + '%';
+  liftEl.className = liftPct > 0 ? 'up' : 'down';
+  const power = sig ? Math.min(0.99, 0.6 + Math.abs(res.t) * 0.04) : Math.max(0.1, 0.3 + Math.abs(res.t) * 0.05);
+  document.getElementById('power').textContent = (power * 100).toFixed(0) + '%';
+}
+
+// ── Charts ─────────────────────────────────────────────────────
+function getDailyRates(filtered) {
+  const days = {};
+  filtered.forEach(r => {
+    if (!days[r.date]) days[r.date] = { A: { s: 0, c: 0 }, B: { s: 0, c: 0 } };
+    const g = r.variant === 'control' ? 'A' : 'B';
+    days[r.date][g].s++;
+    if (r.converted) days[r.date][g].c++;
+  });
+  const sorted = Object.keys(days).sort();
+  return {
+    labels: sorted.map(d => d.slice(5)),
+    A: sorted.map(d => days[d].A.s ? +(days[d].A.c / days[d].A.s * 100).toFixed(2) : null),
+    B: sorted.map(d => days[d].B.s ? +(days[d].B.c / days[d].B.s * 100).toFixed(2) : null)
+  };
+}
+
+function renderLineChart(filtered) {
+  const { labels, A, B } = getDailyRates(filtered);
+  if (lineChart) lineChart.destroy();
+  lineChart = new Chart(document.getElementById('line-chart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Control', data: A, borderColor: '#378ADD', backgroundColor: 'rgba(55,138,221,0.08)', tension: 0.3, pointRadius: 2, borderWidth: 2 },
+        { label: 'Variant', data: B, borderColor: '#1D9E75', backgroundColor: 'rgba(29,158,117,0.08)', tension: 0.3, pointRadius: 2, borderWidth: 2, borderDash: [5, 3] }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8, font: { size: 11 } }, grid: { display: false } },
+        y: { ticks: { callback: v => v + '%', font: { size: 11 } }, grid: { color: 'rgba(128,128,128,0.1)' } }
+      }
+    }
+  });
+}
+
+function renderBarChart(filtered) {
+  const ctrl = filtered.filter(r => r.variant === 'control');
+  const vari = filtered.filter(r => r.variant === 'variant');
+  if (barChart) barChart.destroy();
+  barChart = new Chart(document.getElementById('bar-chart'), {
+    type: 'bar',
+    data: {
+      labels: ['Sessions', 'Conversions'],
+      datasets: [
+        { label: 'Control', data: [ctrl.length, ctrl.filter(r => r.converted).length], backgroundColor: '#378ADD', borderRadius: 4 },
+        { label: 'Variant', data: [vari.length, vari.filter(r => r.converted).length], backgroundColor: '#1D9E75', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 11 } }, grid: { display: false } },
+        y: { ticks: { font: { size: 11 } }, grid: { color: 'rgba(128,128,128,0.1)' } }
+      }
+    }
+  });
+}
+
+function getBoxData(filtered) {
+  function stats(arr) {
+    if (!arr.length) return null;
+    arr = arr.slice().sort((a, b) => a - b);
+    return {
+      mn: arr[0], q1: arr[Math.floor(arr.length * 0.25)],
+      med: arr[Math.floor(arr.length * 0.5)],
+      mean: arr.reduce((s, v) => s + v, 0) / arr.length,
+      q3: arr[Math.floor(arr.length * 0.75)], mx: arr[arr.length - 1]
+    };
+  }
+  return {
+    ctrl: stats(filtered.filter(r => r.converted && r.variant === 'control').map(r => r.revenue)),
+    vari: stats(filtered.filter(r => r.converted && r.variant === 'variant').map(r => r.revenue))
+  };
+}
+
+function renderBoxChart(filtered) {
+  const { ctrl, vari } = getBoxData(filtered);
+  if (!ctrl || !vari) return;
+  if (boxChart) boxChart.destroy();
+  boxChart = new Chart(document.getElementById('box-chart'), {
+    type: 'bar',
+    data: {
+      labels: ['Min', 'Q1', 'Median', 'Mean', 'Q3', 'Max'],
+      datasets: [
+        { label: 'Control', data: [ctrl.mn, ctrl.q1, ctrl.med, ctrl.mean, ctrl.q3, ctrl.mx].map(v => +v.toFixed(1)), backgroundColor: 'rgba(55,138,221,0.25)', borderColor: '#378ADD', borderWidth: 1.5 },
+        { label: 'Variant', data: [vari.mn, vari.q1, vari.med, vari.mean, vari.q3, vari.mx].map(v => +v.toFixed(1)), backgroundColor: 'rgba(29,158,117,0.25)', borderColor: '#1D9E75', borderWidth: 1.5 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 11 } }, grid: { display: false } },
+        y: { ticks: { callback: v => '$' + v, font: { size: 11 } }, grid: { color: 'rgba(128,128,128,0.1)' } }
+      }
+    }
+  });
+}
+
+function renderSegmentTable(filtered) {
+  const tbody = document.querySelector('#segment-table tbody');
+  tbody.innerHTML = ['mobile', 'desktop', 'tablet'].map(dv => {
+    const ctrl = filtered.filter(r => r.variant === 'control' && r.device === dv);
+    const vari = filtered.filter(r => r.variant === 'variant' && r.device === dv);
+    const cvrA = ctrl.length ? ctrl.filter(r => r.converted).length / ctrl.length : 0;
+    const cvrB = vari.length ? vari.filter(r => r.converted).length / vari.length : 0;
+    const lift = cvrA > 0 ? ((cvrB - cvrA) / cvrA * 100) : 0;
+    return `<tr><td>${dv.charAt(0).toUpperCase() + dv.slice(1)}</td><td>${(cvrA * 100).toFixed(2)}%</td><td>${(cvrB * 100).toFixed(2)}%</td><td class="${lift > 0 ? 'up' : 'down'}">${lift > 0 ? '+' : ''}${lift.toFixed(1)}%</td></tr>`;
+  }).join('');
+}
+
+// ── Main update ────────────────────────────────────────────────
+function update() {
+  const filtered = filterData();
+  updateMetricCards(filtered);
+  updateSignificance(filtered);
+  renderLineChart(filtered);
+  renderBarChart(filtered);
+  renderBoxChart(filtered);
+  renderSegmentTable(filtered);
+}
+
+// ── Events ─────────────────────────────────────────────────────
+document.getElementById('run-btn').addEventListener('click', update);
+['filter-device', 'filter-country', 'filter-variant'].forEach(id => {
+  document.getElementById(id).addEventListener('change', update);
+});
+
+document.getElementById('csv-upload').addEventListener('change', function (e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  Papa.parse(file, {
+    header: true, dynamicTyping: true,
+    complete: function (res) {
+      const parsed = res.data.filter(r => r.variant && r.device && r.converted !== undefined);
+      if (!parsed.length) {
+        alert('CSV needs columns: variant, device, country, converted (0/1), revenue, date');
+        return;
+      }
+      DATA = parsed;
+      update();
+    }
+  });
+});
+
+update();
+</script>
+</body>
+</html>
