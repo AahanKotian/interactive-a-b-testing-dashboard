@@ -2,7 +2,7 @@
 
 A browser-based tool for analyzing experiment results with live statistical testing — no backend, no install, no dependencies. Open the HTML file and start testing.
 
-![Dashboard Screenshot](screenshots/dashboard.png)
+<img width="1187" height="980" alt="image" src="https://github.com/user-attachments/assets/0b826196-9cb2-47cc-9855-90f16d087f1c" />
 
 🔗 **[Live Demo](https://yourusername.github.io/ab-testing-dashboard)** ← replace with your GitHub Pages URL
 
