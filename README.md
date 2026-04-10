@@ -4,7 +4,7 @@ A browser-based tool for analyzing experiment results with live statistical test
 
 <img width="1187" height="980" alt="image" src="https://github.com/user-attachments/assets/0b826196-9cb2-47cc-9855-90f16d087f1c" />
 
-🔗 **[Live Demo](https://aahankotian.github.io/ab-testing-dashboard)** ← replace with your GitHub Pages URL
+🔗 **[Live Demo](https://aahankotian.github.io/interactive-a-b-testing-dashboard/)** ← replace with your GitHub Pages URL
 
 ---
 
